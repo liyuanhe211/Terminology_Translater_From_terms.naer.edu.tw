@@ -6,3 +6,4 @@
 /.idea/
 /Data_Scrapy_and_Database_Build/UI_Code_Generation_Prompt
 *.iml
+*.pyc
