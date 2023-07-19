@@ -62,9 +62,6 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
         self.current_buttons = OrderedDict()
         self.category_checkboxes = {}
         self.current_results = None
-        print("Connecting database...", end=" ", flush=True)
-        self.db = dataset.connect('sqlite:///Database.db')
-        print("Done.")
 
         connect_once(self.keyword_lineEdit.returnPressed, self.search_keywords)
         connect_once(self.select_none_pushButton, self.toggle_categories)
@@ -73,10 +70,17 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
 
         self.show()
 
+        print("Connecting database...", end=" ", flush=True)
+        self.status_label.setText("Connecting database... ")
+        Application.processEvents()
         check_and_decompress_db()
+        self.db = dataset.connect('sqlite:///Database.db')
+        print("Done.")
+        self.status_label.setText("Ready.")
+
+        Application.processEvents()
 
         self.center_the_widget()
-
 
     def search_keywords(self):
         self.current_buttons.clear()
@@ -104,10 +108,13 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
 
         if self.current_buttons:
             tuple(self.current_buttons.values())[0].click()
-
+        else:
+            self.update_table()
 
     def search_db(self, query: str, record_key: str = None) -> List[OrderedDict]:
         print("Searching for",query)
+        self.status_label.setText("Searching for "+query+'...')
+        Application.processEvents()
         table = self.db['data']
         if has_chinese_char(query):
             results = table.find(table.table.columns.Chinese.ilike(f'%{query}%'))
@@ -115,12 +122,16 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
             results = table.find(table.table.columns.English.ilike(f'%{query}%'))
         ret = list(results)
         print("Matched",len(ret))
+        self.status_label.setText("Matched "+str(len(ret))+' for '+query+".")
+        Application.processEvents()
 
         # sort by relevance
         def sort_score(query:str,match:str,translate:str):
             query = query.lower()
             match = match.lower()
             contain_as_word = query in match.split()
+            if translate is None:
+                translate = ""
             return (not contain_as_word, len(match), match.find(query), match, translate)
 
         if has_chinese_char(query):
@@ -144,6 +155,12 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
         history_layout.insertWidget(history_layout.count()-1,button)
 
     def update_table(self, results=None, is_category_change=False):
+        if results is None:
+            results = []
+            self.tableWidget.setRowCount(0)
+            self.update_categories(results)
+            return
+
         row_count = 0
         self.current_results = results
 
@@ -166,6 +183,12 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
         self.update_table(self.current_results,is_category_change=True)
 
     def update_categories(self, results):
+        categories_layout = self.category_scrollArea.widget().layout()
+        for i in reversed(range(categories_layout.count())):
+            widget = categories_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.setParent(None)
+
         categories = OrderedDict()
         for result in results:
             category = result['Category']
@@ -197,21 +220,28 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
                     checkbox.click()
 
     def resize_table_column(self):
-        total_width = self.tableWidget.width()
-        max_widths = [0]*self.tableWidget.columnCount()
+        total_width = self.tableWidget.width()-80
+        max_widths = [0,0]
         # print(self.tableWidget.columnCount(),self.tableWidget.rowCount())
         # Calculate max widths
-        for col in range(self.tableWidget.columnCount()):
+        for col in range(self.tableWidget.columnCount()-1):
             for row in range(self.tableWidget.rowCount()):
                 # print(row,col)
                 text = self.tableWidget.item(row, col).text()
                 text_width = sum(2 if '\u4e00' <= ch <= '\u9fff' else 1 for ch in text)
                 max_widths[col] = max(max_widths[col], text_width)
 
+
+        # 保证category显示完全
+        character_count = [self.tableWidget.item(row, 2).text() for row in range(self.tableWidget.rowCount())]
+        character_count = max(len(x) for x in character_count)
+        category_width = 15*character_count
+        total_width-=category_width
+
         # Calculate proportional widths
         total_max_width = sum(max_widths)
-        widths = [total_width * (w/total_max_width)*0.9 for w in max_widths]
-        widths[2] = widths[2]*1.2
+        widths = [total_width * (w/total_max_width) for w in max_widths]
+        widths+=[category_width]
 
         # Set column widths
         for i, width in enumerate(widths):
