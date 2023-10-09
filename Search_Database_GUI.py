@@ -93,9 +93,12 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
             record_key = keyword
             keyword = keyword.strip()
             results = self.search_db(keyword)
-            if not results and re.sub(r'(es|s|yl|ed)$', '', keyword)!=keyword:
-                keyword = re.sub(r'(es|s|yl|ed)$', '', keyword)
-                results = self.search_db(keyword,record_key=record_key)
+            if not results and re.sub(r'(es|yl|ed)$', '', keyword)!=keyword:
+                stripped_keyword = re.sub(r'(es|s|yl|ed)$', '', keyword)
+                results = self.search_db(stripped_keyword,record_key=record_key)
+            if not results and keyword.endswith("s"):
+                stripped_keyword = keyword[:-1]
+                results = self.search_db(stripped_keyword,record_key=record_key)
             if not results and ' ' in keyword:
                 for word in keyword.split():
                     results = self.search_db(word)
@@ -212,11 +215,11 @@ class MyWidget(Ui_Form, QtWidgets.QWidget, Qt_Widget_Common_Functions):
             select_all = self.select_none_pushButton.text() == 'Select All'
             self.select_none_pushButton.setText('Select All' if not select_all else 'Select None')
 
-            for i in range(self.category_scrollArea.widget().layout().count()-1): # The last one is a spacer
+            for i in range(self.category_scrollArea.widget().layout().count()): # The last one is a spacer
                 checkbox = self.category_scrollArea.widget().layout().itemAt(i).widget()
-                if select_all and not checkbox.isChecked():
+                if checkbox is not None and select_all and not checkbox.isChecked():
                     checkbox.click()
-                if not select_all and checkbox.isChecked():
+                if checkbox is not None and not select_all and checkbox.isChecked():
                     checkbox.click()
 
     def resize_table_column(self):
